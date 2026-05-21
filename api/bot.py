@@ -91,42 +91,42 @@ def is_subscribed(user_id):
 # -------- Images (Imgur URLs from user) --------
 
 IMAGES = {
-    "intro": "https://i.imgur.com/66HuAKT.png",
-    "gender": "https://i.imgur.com/RO1jfli.jpeg",
-    "gender_female_joke": "https://i.imgur.com/uVg5axv.jpeg",
-    "age": "https://i.imgur.com/GS8yfiS.jpeg",
-    "body": "https://i.imgur.com/pzqvS2z.jpeg",
-    "goal": "https://i.imgur.com/GUB8fdb.jpeg",
-    "guild_intro": "https://i.imgur.com/EqT0hbp.jpeg",
-    "firstChoice": "https://i.imgur.com/9Nso4Fb.jpeg",
-    "gym_entrance": "https://i.imgur.com/QuAi4Wd.jpeg",
-    "gym_story": "https://i.imgur.com/k3FFVWr.jpeg",
-    "gym_q2": "https://i.imgur.com/y3TI8an.jpeg",
-    "gym_q3": "https://i.imgur.com/4M1JRvd.jpeg",
-    "gym_q4": "https://i.imgur.com/4M1JRvd.jpeg",
-    "kitchen_intro": "https://i.imgur.com/oD2G75p.jpeg",
-    "kitchen_q2": "https://i.imgur.com/jzv7o1h.jpeg",
-    "kitchen_q3": "https://i.imgur.com/A9TOxJz.jpeg",
-    "kitchen_q4": "https://i.imgur.com/eo5qObo.png",
-    "kitchen_q5": "https://i.imgur.com/ZLXJwjp.jpeg",
-    "brain_meet": "https://i.imgur.com/QTrG8jS.jpeg",
-    "brain_question_gift": "https://i.imgur.com/hcUrbk0.png",
-    "brain_q2": "https://i.imgur.com/JBbTSPJ.jpeg",
-    "sleep_story": "https://i.imgur.com/kzen3CE.jpeg",
-    "sleep_story2": "https://i.imgur.com/zqFLfG0.jpeg",
-    "sleep_q2": "https://i.imgur.com/GvDZAFL.jpeg",
-    "sleep_q3": "https://i.imgur.com/kyC1ur0.jpeg",
-    "real_life_story": "https://i.imgur.com/CPCpOIt.jpeg",
-    "real_life_q2": "https://i.imgur.com/BCxrsMu.jpeg",
-    "real_life_q3": "https://i.imgur.com/gZtzmkz.jpeg",
-    "real_life_q4": "https://i.imgur.com/C3nkbxo.jpeg",
-    "boss_intro": "https://i.imgur.com/a9Wq1l2.jpeg",
-    "boss_riddle": "https://i.imgur.com/vqjZvw5.jpeg",
-    "boss_victory": "https://i.imgur.com/nJnmg5v.jpeg",
-    "diagnostics": "https://i.imgur.com/hxhRZbm.jpeg",
-    "offer": "https://i.imgur.com/9HwguXs.jpeg",
-    "contact": "https://i.imgur.com/28Jik7b.jpeg",
-    "end": "https://i.imgur.com/Sq4MzGe.jpeg",
+    "intro": "/images/intro.png",
+    "gender": "/images/gender.jpeg",
+    "gender_female_joke": "/images/gender_female_joke.jpeg",
+    "age": "/images/age.jpeg",
+    "body": "/images/body.jpeg",
+    "goal": "/images/goal.jpeg",
+    "guild_intro": "/images/guild_intro.jpeg",
+    "firstChoice": "/images/firstChoice.jpeg",
+    "gym_entrance": "/images/gym_entrance.jpeg",
+    "gym_story": "/images/gym_story.jpeg",
+    "gym_q2": "/images/gym_q2.jpeg",
+    "gym_q3": "/images/gym_q3.jpeg",
+    "gym_q4": "/images/gym_q3.jpeg",
+    "kitchen_intro": "/images/kitchen_intro.jpeg",
+    "kitchen_q2": "/images/kitchen_q2.jpeg",
+    "kitchen_q3": "/images/kitchen_q3.jpeg",
+    "kitchen_q4": "/images/kitchen_q4.png",
+    "kitchen_q5": "/images/kitchen_q5.jpeg",
+    "brain_meet": "/images/brain_meet.jpeg",
+    "brain_question_gift": "/images/brain_question_gift.png",
+    "brain_q2": "/images/brain_q2.jpeg",
+    "sleep_story": "/images/sleep_story.jpeg",
+    "sleep_story2": "/images/sleep_story2.jpeg",
+    "sleep_q2": "/images/sleep_q2.jpeg",
+    "sleep_q3": "/images/sleep_q3.jpeg",
+    "real_life_story": "/images/real_life_story.jpeg",
+    "real_life_q2": "/images/real_life_q2.jpeg",
+    "real_life_q3": "/images/real_life_q3.jpeg",
+    "real_life_q4": "/images/real_life_q4.jpeg",
+    "boss_intro": "/images/boss_intro.jpeg",
+    "boss_riddle": "/images/boss_riddle.jpeg",
+    "boss_victory": "/images/boss_victory.jpeg",
+    "diagnostics": "/images/diagnostics.jpeg",
+    "offer": "/images/offer.jpeg",
+    "contact": "/images/contact.jpeg",
+    "end": "/images/end.jpeg",
 }
 
 GUIDE_FILES = {
@@ -538,7 +538,9 @@ def send_step(chat_id, step_id):
 
     img_key = step.get("image")
     if img_key and img_key in IMAGES:
-        send_photo(chat_id, IMAGES[img_key])
+        img_path = IMAGES[img_key]
+        img_url = (BASE_URL + img_path) if (BASE_URL and img_path.startswith("/")) else img_path
+        send_photo(chat_id, img_url)
 
     if "inline" in step:
         send_text(chat_id, step["text"], inline_kb=step["inline"])
@@ -559,9 +561,9 @@ def send_extras(chat_id, extras):
             title = GUIDE_FILES.get(val, val)
             if BASE_URL:
                 url = f"{BASE_URL}/guides/{val}"
-                send_text(chat_id, f"🎁 Награда: {title}\n📥 Скачать: {url}")
+                send_document(chat_id, url, caption=f"🎁 {title}")
             else:
-                send_text(chat_id, f"🎁 Награда: {title}\n(ссылка будет доступна после деплоя)")
+                send_text(chat_id, f"🎁 Награда: {title}\n(файл будет доступен после деплоя)")
 
 
 # -------- Diagnostics / offer / contact --------
@@ -589,7 +591,7 @@ def calc_kbju(s):
 
 def send_diagnostics(chat_id):
     s = get_state(chat_id)
-    send_photo(chat_id, IMAGES["diagnostics"])
+    send_photo(chat_id, BASE_URL + IMAGES["diagnostics"])
     kbju = calc_kbju(s)
     lines = [
         "📋 ДИАГНОСТИКА ОТ МАГИСТРА SERBOLIN'А",
@@ -628,7 +630,7 @@ def send_diagnostics(chat_id):
 
 
 def send_offer(chat_id):
-    send_photo(chat_id, IMAGES["offer"])
+    send_photo(chat_id, BASE_URL + IMAGES["offer"])
     send_text(chat_id,
               "Оставь заявку на бесплатную консультацию — и магистр лично разберёт твою ситуацию.\n\nНажми кнопку ниже, чтобы поделиться контактом.",
               reply_kb=["📱 Отправить контакт", "❌ Не сейчас"])
@@ -637,7 +639,7 @@ def send_offer(chat_id):
 
 
 def send_contact_request(chat_id):
-    send_photo(chat_id, IMAGES["contact"])
+    send_photo(chat_id, BASE_URL + IMAGES["contact"])
     # Use Telegram's request_contact button
     rm = {
         "keyboard": [[{"text": "📱 Поделиться номером", "request_contact": True}], [{"text": "❌ Не сейчас"}]],
@@ -650,7 +652,7 @@ def send_contact_request(chat_id):
 
 
 def send_end(chat_id):
-    send_photo(chat_id, IMAGES["end"])
+    send_photo(chat_id, BASE_URL + IMAGES["end"])
     send_text(chat_id,
               "🏆 Сага завершена. Магистр Serbolin свяжется с тобой в ближайшее время.\n\nЧтобы пройти заново — нажми /start.",
               remove_kb=True)
