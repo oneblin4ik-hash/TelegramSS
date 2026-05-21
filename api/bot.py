@@ -18,6 +18,13 @@ CHANNEL_URL = "https://t.me/Mr_Serbolin"
 VERCEL_URL = os.getenv("VERCEL_URL", "")  # without protocol
 BASE_URL = f"https://{VERCEL_URL}" if VERCEL_URL else ""
 
+# Overridden at runtime from the Host header of the incoming webhook request
+_runtime_base_url = ""
+
+
+def get_base_url():
+    return _runtime_base_url or BASE_URL
+
 API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 STATE_FILE = "/tmp/saga_states.json"
@@ -539,7 +546,9 @@ def send_step(chat_id, step_id):
     img_key = step.get("image")
     if img_key and img_key in IMAGES:
         img_path = IMAGES[img_key]
-        img_url = (BASE_URL + img_path) if (BASE_URL and img_path.startswith("/")) else img_path
+        base = get_base_url()
+        img_url = (base + img_path) if (base and img_path.startswith("/")) else img_path
+        print(f"[img] sending {img_url}")
         send_photo(chat_id, img_url)
 
     if "inline" in step:
@@ -591,7 +600,7 @@ def calc_kbju(s):
 
 def send_diagnostics(chat_id):
     s = get_state(chat_id)
-    send_photo(chat_id, BASE_URL + IMAGES["diagnostics"])
+    send_photo(chat_id, get_base_url() + IMAGES["diagnostics"])
     kbju = calc_kbju(s)
     lines = [
         "📋 ДИАГНОСТИКА ОТ МАГИСТРА SERBOLIN'А",
@@ -630,7 +639,7 @@ def send_diagnostics(chat_id):
 
 
 def send_offer(chat_id):
-    send_photo(chat_id, BASE_URL + IMAGES["offer"])
+    send_photo(chat_id, get_base_url() + IMAGES["offer"])
     send_text(chat_id,
               "Оставь заявку на бесплатную консультацию — и магистр лично разберёт твою ситуацию.\n\nНажми кнопку ниже, чтобы поделиться контактом.",
               reply_kb=["📱 Отправить контакт", "❌ Не сейчас"])
@@ -639,7 +648,7 @@ def send_offer(chat_id):
 
 
 def send_contact_request(chat_id):
-    send_photo(chat_id, BASE_URL + IMAGES["contact"])
+    send_photo(chat_id, get_base_url() + IMAGES["contact"])
     # Use Telegram's request_contact button
     rm = {
         "keyboard": [[{"text": "📱 Поделиться номером", "request_contact": True}], [{"text": "❌ Не сейчас"}]],
@@ -652,7 +661,7 @@ def send_contact_request(chat_id):
 
 
 def send_end(chat_id):
-    send_photo(chat_id, BASE_URL + IMAGES["end"])
+    send_photo(chat_id, get_base_url() + IMAGES["end"])
     send_text(chat_id,
               "🏆 Сага завершена. Магистр Serbolin свяжется с тобой в ближайшее время.\n\nЧтобы пройти заново — нажми /start.",
               remove_kb=True)
@@ -792,6 +801,12 @@ def process_update(update):
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        global _runtime_base_url
+        host = self.headers.get("host", "")
+        if host and not _runtime_base_url:
+            _runtime_base_url = f"https://{host}"
+            print(f"[boot] runtime base URL set to {_runtime_base_url}")
+
         length = int(self.headers.get("content-length", 0))
         body = self.rfile.read(length) if length else b"{}"
         try:
@@ -824,6 +839,33 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if path.endswith("/debug"):
+            host = self.headers.get("host", "")
+            base = f"https://{host}" if host else (BASE_URL or "(unknown)")
+            test_img_url = base + "/img/intro.jpeg"
+            try:
+                req = urllib.request.Request(test_img_url, method="HEAD")
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    img_status = f"OK {r.status}"
+            except Exception as ex:
+                img_status = f"FAIL: {ex}"
+            webhook_info = tg("getWebhookInfo") or {}
+            debug = {
+                "base_url_env": BASE_URL,
+                "base_url_runtime": _runtime_base_url,
+                "base_url_used": base,
+                "test_image_url": test_img_url,
+                "test_image_fetch": img_status,
+                "vercel_url_env": VERCEL_URL,
+                "webhook": webhook_info.get("result", {}),
+            }
+            body = json.dumps(debug, ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -831,6 +873,7 @@ class handler(BaseHTTPRequestHandler):
         base = f"https://{host}" if host else (BASE_URL or "(unknown)")
         info = (
             f"Saga bot is alive. Base URL: {base}\n"
-            f"Open {base}/setup to register the Telegram webhook."
+            f"Open {base}/setup to register the Telegram webhook.\n"
+            f"Open {base}/debug to diagnose image delivery."
         )
         self.wfile.write(info.encode("utf-8"))
