@@ -1,3 +1,1 @@
-aiogram==3.7.0
-aiohttp==3.9.5
-python-dotenv==1.0.0
+# Webhook handler uses only the Python stdlib.
