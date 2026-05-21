@@ -804,8 +804,31 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
+        path = self.path.split("?", 1)[0].rstrip("/") or "/"
+        if path.endswith("/setup"):
+            host = self.headers.get("host", "")
+            base = f"https://{host}" if host else BASE_URL
+            webhook_url = f"{base}/webhook"
+            result = tg("setWebhook", url=webhook_url, drop_pending_updates=True)
+            info_resp = tg("getWebhookInfo")
+            body = json.dumps(
+                {"setWebhook": result, "getWebhookInfo": info_resp, "webhook_url": webhook_url},
+                ensure_ascii=False,
+                indent=2,
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-        info = f"Saga bot is alive. Base URL: {BASE_URL or '(set VERCEL_URL env var)'}"
+        host = self.headers.get("host", "")
+        base = f"https://{host}" if host else (BASE_URL or "(unknown)")
+        info = (
+            f"Saga bot is alive. Base URL: {base}\n"
+            f"Open {base}/setup to register the Telegram webhook."
+        )
         self.wfile.write(info.encode("utf-8"))
