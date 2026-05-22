@@ -14,7 +14,7 @@ import traceback
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8950032855:AAF3puz71ztCKrXMJEdgq8je9K8Cjr7EhOg")
 OWNER_ID = int(os.getenv("OWNER_ID", "708122486"))
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1002095605776"))
-CHANNEL_URL = "https://t.me/Mr_Serbolin"
+CHANNEL_URL = "https://t.me/Serbolin"
 VERCEL_URL = os.getenv("VERCEL_URL", "")  # without protocol
 BASE_URL = f"https://{VERCEL_URL}" if VERCEL_URL else ""
 
@@ -570,11 +570,12 @@ def send_extras(chat_id, extras):
             send_text(chat_id, val)
         elif kind == "guide":
             title = GUIDE_FILES.get(val, val)
-            if BASE_URL:
-                url = f"{BASE_URL}/guides/{val}"
+            base = get_base_url()
+            if base:
+                url = f"{base}/guides/{val}"
                 send_document(chat_id, url, caption=f"🎁 {title}")
             else:
-                send_text(chat_id, f"🎁 Награда: {title}\n(файл будет доступен после деплоя)")
+                send_text(chat_id, f"🎁 Награда: {title}")
 
 
 # -------- Diagnostics / offer / contact --------
