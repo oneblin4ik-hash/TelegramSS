@@ -84,6 +84,71 @@ def send_document(chat_id, document_url, caption=None):
     return tg("sendDocument", chat_id=chat_id, document=document_url, caption=caption)
 
 
+# Static assets bundled with the function (see vercel.json includeFiles)
+PUBLIC_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public"))
+
+
+def _build_multipart(fields, files):
+    boundary = "----TgBoundary" + os.urandom(8).hex()
+    out = []
+    for name, value in fields.items():
+        if value is None:
+            continue
+        if not isinstance(value, (str, bytes)):
+            value = json.dumps(value, ensure_ascii=False)
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        out.append(f"--{boundary}\r\n".encode())
+        out.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        out.append(value)
+        out.append(b"\r\n")
+    for name, (filename, content, mimetype) in files.items():
+        out.append(f"--{boundary}\r\n".encode())
+        out.append(f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode())
+        out.append(f"Content-Type: {mimetype}\r\n\r\n".encode())
+        out.append(content)
+        out.append(b"\r\n")
+    out.append(f"--{boundary}--\r\n".encode())
+    return boundary, b"".join(out)
+
+
+def tg_upload(method, files, **fields):
+    boundary, data = _build_multipart(fields, files)
+    url = f"{API}/{method}"
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print(f"TG upload HTTPError {method}: {e.read().decode()}")
+    except Exception as e:
+        print(f"TG upload error {method}: {e}")
+    return None
+
+
+def send_photo_local(chat_id, image_path, caption=None, reply_markup=None):
+    """Read the photo from the bundled public/ dir and upload bytes to Telegram.
+    Bypasses Telegram's URL fetcher (which can fail on first request after a cold deploy)."""
+    full_path = os.path.normpath(os.path.join(PUBLIC_DIR, image_path.lstrip("/")))
+    try:
+        with open(full_path, "rb") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"[img] cannot read {full_path}: {e}")
+        return None
+    filename = os.path.basename(image_path)
+    mimetype = "image/jpeg" if filename.lower().endswith((".jpg", ".jpeg")) else "image/png"
+    fields = {"chat_id": chat_id}
+    if caption:
+        fields["caption"] = caption
+    if reply_markup:
+        fields["reply_markup"] = reply_markup
+    return tg_upload("sendPhoto", {"photo": (filename, content, mimetype)}, **fields)
+
+
 def is_subscribed(user_id):
     url = f"{API}/getChatMember?chat_id={CHANNEL_ID}&user_id={user_id}"
     try:
@@ -599,19 +664,25 @@ def send_step(chat_id, step_id):
 
     if img_key and img_key in IMAGES:
         img_path = IMAGES[img_key]
-        base = get_base_url()
-        img_url = (base + img_path) if (base and img_path.startswith("/")) else img_path
-        print(f"[img] sending {img_url}")
-        if len(text) <= 1024:
-            result = tg("sendPhoto", chat_id=chat_id, photo=img_url,
-                        caption=text, reply_markup=reply_markup)
-            if result and result.get("ok"):
+        print(f"[img] uploading {img_path}")
+        caption = text if len(text) <= 1024 else None
+        result = send_photo_local(chat_id, img_path,
+                                   caption=caption,
+                                   reply_markup=reply_markup if caption else None)
+        if result and result.get("ok"):
+            if caption is not None:
                 return
-            print(f"[img] sendPhoto failed for {img_url}: {result}")
         else:
-            photo_result = tg("sendPhoto", chat_id=chat_id, photo=img_url)
-            if photo_result and not photo_result.get("ok"):
-                print(f"[img] sendPhoto failed for {img_url}: {photo_result}")
+            print(f"[img] upload failed for {img_path}: {result}")
+            base = get_base_url()
+            if base:
+                fallback_url = base + img_path
+                result = tg("sendPhoto", chat_id=chat_id, photo=fallback_url,
+                            caption=caption,
+                            reply_markup=reply_markup if caption else None)
+                if result and result.get("ok") and caption is not None:
+                    return
+                print(f"[img] URL fallback also failed for {fallback_url}: {result}")
 
     tg("sendMessage", chat_id=chat_id, text=text, reply_markup=reply_markup)
 
@@ -681,7 +752,7 @@ def send_missing_guides(chat_id, s):
 
 def send_diagnostics(chat_id):
     s = get_state(chat_id)
-    send_photo(chat_id, get_base_url() + IMAGES["diagnostics"])
+    send_photo_local(chat_id, IMAGES["diagnostics"])
     kbju = calc_kbju(s)
     goal = s.get("goal")
     lines = [
@@ -731,7 +802,7 @@ def send_diagnostics(chat_id):
 
 
 def send_offer(chat_id):
-    send_photo(chat_id, get_base_url() + IMAGES["offer"])
+    send_photo_local(chat_id, IMAGES["offer"])
     send_text(chat_id,
               "Оставь заявку на бесплатную консультацию — и магистр лично разберёт твою ситуацию.\n\nНажми кнопку ниже, чтобы поделиться контактом.",
               reply_kb=["📱 Отправить контакт", "❌ Не сейчас"])
@@ -740,7 +811,7 @@ def send_offer(chat_id):
 
 
 def send_contact_request(chat_id):
-    send_photo(chat_id, get_base_url() + IMAGES["contact"])
+    send_photo_local(chat_id, IMAGES["contact"])
     # Use Telegram's request_contact button
     rm = {
         "keyboard": [[{"text": "📱 Поделиться номером", "request_contact": True}], [{"text": "❌ Не сейчас"}]],
@@ -753,7 +824,7 @@ def send_contact_request(chat_id):
 
 
 def send_end(chat_id):
-    send_photo(chat_id, get_base_url() + IMAGES["end"])
+    send_photo_local(chat_id, IMAGES["end"])
     send_text(chat_id,
               "🏆 Сага завершена. Магистр Serbolin свяжется с тобой в ближайшее время.\n\nЧтобы пройти заново — нажми /start.",
               remove_kb=True)

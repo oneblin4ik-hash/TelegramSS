@@ -3,7 +3,8 @@
     "api/bot.py": {
       "runtime": "@vercel/python@4.3.0",
       "memory": 256,
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "public/**"
     }
   },
   "rewrites": [
