@@ -146,6 +146,40 @@ GUIDE_FILES = {
     "anti_otek.pdf": "💧 Анти-Отек: 5-дневный экспресс-план",
 }
 
+# Inventory name → guide filename (для выдачи недополученных гайдов в финале)
+INV_TO_GUIDE = {
+    "Гайд «13 советов как всегда быть в форме»": "13_sovetov.pdf",
+    "Чек-лист «Как вести дневник тренировок»": "dnevnik.pdf",
+    "Гайд «Как легко считать КБЖУ»": "kbju.pdf",
+    "Мотивационный гайд": "motivation.pdf",
+    "Анти-Отек: 5-дневный экспресс-план": "anti_otek.pdf",
+}
+
+# Goal → персональные рекомендации в диагностике
+GOAL_TIPS = {
+    "сжечь жир": (
+        "🔥 ТВОЙ ПУТЬ — СЖИГАТЕЛЬ ЖИРА:\n"
+        "• Дефицит ~15-20% от нормы калорий\n"
+        "• 2-3 силовые в неделю — сохранят мышцы под жиром\n"
+        "• 8-10 тысяч шагов в день — твой главный жиросжигатель\n"
+        "• Белок 1.8-2 г/кг и сон 7-8 часов важнее любых «детоксов»"
+    ),
+    "набрать массу": (
+        "💪 ТВОЙ ПУТЬ — НАБОР МЫШЕЧНОЙ БРОНИ:\n"
+        "• Профицит ~10% от нормы — лишний жир ни к чему\n"
+        "• Прогрессия: каждую неделю чуть больше веса или повторов\n"
+        "• Белок 1.8-2.2 г/кг — без него мышцы не вырастут\n"
+        "• Сон 8+ часов — рост происходит во сне, не в зале"
+    ),
+    "энергия": (
+        "⚡ ТВОЙ ПУТЬ — ЭНЕРГИЯ И ЛЁГКОСТЬ:\n"
+        "• Регулярные приёмы пищи — без скачков сахара\n"
+        "• 2 силовые + 1 кардио в неделю\n"
+        "• 2 литра воды и стабильный режим сна\n"
+        "• Прогулки 30 минут в день — твой стабилизатор настроения"
+    ),
+}
+
 
 # -------- State helpers --------
 
@@ -622,10 +656,34 @@ def calc_kbju(s):
     return {"cal": round(cal), "protein": protein, "fat": fat, "carbs": carbs}
 
 
+def send_missing_guides(chat_id, s):
+    received = set(s.get("inventory", []))
+    missing = [(fn, inv_name) for inv_name, fn in INV_TO_GUIDE.items() if inv_name not in received]
+    if not missing:
+        return
+    send_text(chat_id,
+              "🎁 Магистр Serbolin сжалился над странником и решил вручить недостающие свитки.\n"
+              "Возьми их с благодарностью — без них пресс не удержать:")
+    base = get_base_url()
+    for fn, inv_name in missing:
+        title = GUIDE_FILES.get(fn, inv_name)
+        if base:
+            url = f"{base}/guides/{fn}"
+            result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
+            if not (result and result.get("ok")):
+                print(f"[guide] sendDocument failed for {url}: {result}")
+                send_text(chat_id, f"🎁 Награда: {title}")
+        else:
+            send_text(chat_id, f"🎁 Награда: {title}")
+        if inv_name not in s["inventory"]:
+            s["inventory"].append(inv_name)
+
+
 def send_diagnostics(chat_id):
     s = get_state(chat_id)
     send_photo(chat_id, get_base_url() + IMAGES["diagnostics"])
     kbju = calc_kbju(s)
+    goal = s.get("goal")
     lines = [
         "📋 ДИАГНОСТИКА ОТ МАГИСТРА SERBOLIN'А",
         "",
@@ -644,19 +702,29 @@ def send_diagnostics(chat_id):
         lines.append("")
         lines.append("🛡️ У тебя нет уязвимостей — впечатляюще!")
     if kbju:
+        cal_note = ""
+        if goal == "сжечь жир":
+            cal_note = "  (с дефицитом для жиросжигания)"
+        elif goal == "набрать массу":
+            cal_note = "  (с профицитом для роста мышц)"
         lines += [
             "",
             "🍽️ Твои персональные нормы КБЖУ:",
-            f"   Калории: {kbju['cal']} ккал",
+            f"   Калории: {kbju['cal']} ккал{cal_note}",
             f"   Белки: {kbju['protein']} г",
             f"   Жиры: {kbju['fat']} г",
             f"   Углеводы: {kbju['carbs']} г",
         ]
+    if goal in GOAL_TIPS:
+        lines += ["", GOAL_TIPS[goal]]
     lines += [
         "",
         "Это лишь верхушка айсберга. Чтобы реально вернуть пресс и удержать его, нужен индивидуальный разбор твоей ситуации.",
     ]
     send_text(chat_id, "\n".join(lines))
+
+    send_missing_guides(chat_id, s)
+
     s["step"] = "offer"
     send_text(chat_id, "🎯 Магистр Serbolin приглашает тебя на БЕСПЛАТНУЮ консультацию.",
               reply_kb=["🎯 Оставить заявку (БЕСПЛАТНО)", "❌ Не сейчас"])
