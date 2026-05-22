@@ -526,6 +526,20 @@ def apply_effects(uid, effects):
     return extra_msgs
 
 
+def build_reply_markup(step):
+    if "inline" in step:
+        return {"inline_keyboard": step["inline"]}
+    if step.get("input"):
+        return {"remove_keyboard": True}
+    if "buttons" in step:
+        return {
+            "keyboard": [[{"text": b[0]}] for b in step["buttons"]],
+            "resize_keyboard": True,
+            "one_time_keyboard": False,
+        }
+    return None
+
+
 def send_step(chat_id, step_id):
     uid = chat_id
     s = get_state(uid)
@@ -545,23 +559,27 @@ def send_step(chat_id, step_id):
         send_text(chat_id, f"⚠️ Шаг {step_id} не найден. Нажми /start, чтобы начать сначала.")
         return
 
+    text = step.get("text", "")
+    reply_markup = build_reply_markup(step)
     img_key = step.get("image")
+
     if img_key and img_key in IMAGES:
         img_path = IMAGES[img_key]
         base = get_base_url()
         img_url = (base + img_path) if (base and img_path.startswith("/")) else img_path
         print(f"[img] sending {img_url}")
-        send_photo(chat_id, img_url)
+        if len(text) <= 1024:
+            result = tg("sendPhoto", chat_id=chat_id, photo=img_url,
+                        caption=text, reply_markup=reply_markup)
+            if result and result.get("ok"):
+                return
+            print(f"[img] sendPhoto failed for {img_url}: {result}")
+        else:
+            photo_result = tg("sendPhoto", chat_id=chat_id, photo=img_url)
+            if photo_result and not photo_result.get("ok"):
+                print(f"[img] sendPhoto failed for {img_url}: {photo_result}")
 
-    if "inline" in step:
-        send_text(chat_id, step["text"], inline_kb=step["inline"])
-    elif step.get("input"):
-        send_text(chat_id, step["text"], remove_kb=True)
-    elif "buttons" in step:
-        labels = [b[0] for b in step["buttons"]]
-        send_text(chat_id, step["text"], reply_kb=labels)
-    else:
-        send_text(chat_id, step["text"])
+    tg("sendMessage", chat_id=chat_id, text=text, reply_markup=reply_markup)
 
 
 def send_extras(chat_id, extras):
@@ -573,7 +591,10 @@ def send_extras(chat_id, extras):
             base = get_base_url()
             if base:
                 url = f"{base}/guides/{val}"
-                send_document(chat_id, url, caption=f"🎁 {title}")
+                result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
+                if not (result and result.get("ok")):
+                    print(f"[guide] sendDocument failed for {url}: {result}")
+                    send_text(chat_id, f"🎁 Награда: {title}")
             else:
                 send_text(chat_id, f"🎁 Награда: {title}")
 
