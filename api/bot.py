@@ -149,6 +149,21 @@ def send_photo_local(chat_id, image_path, caption=None, reply_markup=None):
     return tg_upload("sendPhoto", {"photo": (filename, content, mimetype)}, **fields)
 
 
+def send_document_local(chat_id, guide_filename, caption=None):
+    """Upload a PDF from public/guides/ directly to Telegram (no URL fetch required)."""
+    full_path = os.path.normpath(os.path.join(PUBLIC_DIR, "guides", guide_filename))
+    try:
+        with open(full_path, "rb") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"[guide] cannot read {full_path}: {e}")
+        return None
+    fields = {"chat_id": str(chat_id)}
+    if caption:
+        fields["caption"] = caption
+    return tg_upload("sendDocument", {"document": (guide_filename, content, "application/pdf")}, **fields)
+
+
 def is_subscribed(user_id):
     url = f"{API}/getChatMember?chat_id={CHANNEL_ID}&user_id={user_id}"
     try:
@@ -643,6 +658,7 @@ def send_step(chat_id, step_id):
     uid = chat_id
     s = get_state(uid)
     s["step"] = step_id
+    save_states()  # persist early — before API calls that could time out
 
     if step_id == "diagnostics":
         return send_diagnostics(chat_id)
@@ -693,15 +709,15 @@ def send_extras(chat_id, extras):
             send_text(chat_id, val)
         elif kind == "guide":
             title = GUIDE_FILES.get(val, val)
-            base = get_base_url()
-            if base:
-                url = f"{base}/guides/{val}"
-                result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
+            result = send_document_local(chat_id, val, caption=f"🎁 {title}")
+            if not (result and result.get("ok")):
+                print(f"[guide] local upload failed for {val}: {result}")
+                base = get_base_url()
+                if base:
+                    url = f"{base}/guides/{val}"
+                    result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
                 if not (result and result.get("ok")):
-                    print(f"[guide] sendDocument failed for {url}: {result}")
                     send_text(chat_id, f"🎁 Награда: {title}")
-            else:
-                send_text(chat_id, f"🎁 Награда: {title}")
 
 
 # -------- Diagnostics / offer / contact --------
@@ -735,17 +751,17 @@ def send_missing_guides(chat_id, s):
     send_text(chat_id,
               "🎁 Магистр Serbolin сжалился над странником и решил вручить недостающие свитки.\n"
               "Возьми их с благодарностью — без них пресс не удержать:")
-    base = get_base_url()
     for fn, inv_name in missing:
         title = GUIDE_FILES.get(fn, inv_name)
-        if base:
-            url = f"{base}/guides/{fn}"
-            result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
+        result = send_document_local(chat_id, fn, caption=f"🎁 {title}")
+        if not (result and result.get("ok")):
+            print(f"[guide] local upload failed for {fn}: {result}")
+            base = get_base_url()
+            if base:
+                url = f"{base}/guides/{fn}"
+                result = tg("sendDocument", chat_id=chat_id, document=url, caption=f"🎁 {title}")
             if not (result and result.get("ok")):
-                print(f"[guide] sendDocument failed for {url}: {result}")
                 send_text(chat_id, f"🎁 Награда: {title}")
-        else:
-            send_text(chat_id, f"🎁 Награда: {title}")
         if inv_name not in s["inventory"]:
             s["inventory"].append(inv_name)
 
